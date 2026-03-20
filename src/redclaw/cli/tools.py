@@ -1,5 +1,7 @@
-"""Tools command — list and search available tools."""
+"""Tools command — list, search, and manage available tools."""
 from __future__ import annotations
+
+from pathlib import Path
 
 import click
 from rich.console import Console
@@ -12,7 +14,7 @@ from redclaw.cli.main import pass_context, ClawContext
 @click.group(invoke_without_command=True)
 @click.pass_context
 def tools(ctx: click.Context) -> None:
-    """List and search available tools."""
+    """List, search, and manage available tools."""
     if ctx.invoked_subcommand is None:
         _list_tools()
 
@@ -169,11 +171,17 @@ def tools_recommend(objective: str, limit: int) -> None:
 
 def _list_tools() -> None:
     from redclaw.tools import create_default_registry
+    from redclaw.tools.loader import load_custom_tools, get_plugin_directory
 
     registry = create_default_registry()
+
+    # Load custom plugins
+    plugin_dir = get_plugin_directory()
+    custom_count = load_custom_tools(plugin_dir, registry)
+
     console = Console()
 
-    table = Table(title="Available Tools")
+    table = Table(title=f"Available Tools ({registry.count} total, {custom_count} custom)")
     table.add_column("ID", style="cyan")
     table.add_column("Name")
     table.add_column("Category")
@@ -191,3 +199,192 @@ def _list_tools() -> None:
         )
 
     console.print(table)
+
+
+# ─── Plugin Management Commands ───────────────────────────────────────────────
+
+
+@tools.command("add")
+@click.argument("yaml_file", type=click.Path(exists=True, path_type=Path))
+@click.option("--force", "-f", is_flag=True, help="Overwrite existing tool")
+def tools_add(yaml_file: Path, force: bool) -> None:
+    """Add a custom tool from a YAML definition file.
+
+    The YAML file should define the tool's id, binary, args, and output parsing rules.
+
+    Examples:
+        claw tools add my_scanner.yaml
+        claw tools add /path/to/custom_tool.yaml --force
+    """
+    from redclaw.tools.loader import install_tool_yaml, load_tool_from_yaml
+
+    console = Console()
+
+    # Preview the tool
+    tool = load_tool_from_yaml(yaml_file)
+    if tool:
+        console.print(Panel(
+            f"[bold]ID:[/bold] {tool.meta.id}\n"
+            f"[bold]Name:[/bold] {tool.meta.name}\n"
+            f"[bold]Binary:[/bold] {tool.meta.binary}\n"
+            f"[bold]Category:[/bold] {tool.meta.category.value}\n"
+            f"[bold]Risk:[/bold] {tool.meta.risk_level.value}\n"
+            f"[bold]Description:[/bold] {tool.meta.description}",
+            title="[bold cyan]Tool Preview[/bold cyan]",
+            border_style="cyan",
+        ))
+
+    success, message = install_tool_yaml(yaml_file, overwrite=force)
+
+    if success:
+        console.print(f"[green]✓[/green] {message}")
+    else:
+        console.print(f"[red]✗[/red] {message}")
+        raise SystemExit(1)
+
+
+@tools.command("remove")
+@click.argument("tool_id")
+@click.option("--yes", "-y", is_flag=True, help="Skip confirmation")
+def tools_remove(tool_id: str, yes: bool) -> None:
+    """Remove a custom tool plugin.
+
+    Only custom tools installed via 'claw tools add' can be removed.
+    Built-in tools cannot be removed.
+
+    Examples:
+        claw tools remove my_custom_scanner
+        claw tools remove custom_tool --yes
+    """
+    from redclaw.tools.loader import uninstall_tool, list_installed_tools
+
+    console = Console()
+
+    # Check if tool exists in plugins
+    installed = list_installed_tools()
+    tool_ids = [t[0] for t in installed]
+
+    if tool_id not in tool_ids:
+        console.print(f"[red]✗[/red] Tool '{tool_id}' is not a custom plugin (or doesn't exist)")
+        console.print(f"[dim]Installed plugins: {', '.join(tool_ids) or 'none'}[/dim]")
+        raise SystemExit(1)
+
+    if not yes:
+        click.confirm(f"Remove tool '{tool_id}'?", abort=True)
+
+    success, message = uninstall_tool(tool_id)
+
+    if success:
+        console.print(f"[green]✓[/green] {message}")
+    else:
+        console.print(f"[red]✗[/red] {message}")
+        raise SystemExit(1)
+
+
+@tools.command("plugins")
+def tools_plugins() -> None:
+    """List installed custom tool plugins.
+
+    Shows all custom tools installed in ~/.redclaw/plugins/
+    """
+    from redclaw.tools.loader import list_installed_tools, get_plugin_directory
+
+    console = Console()
+    plugins_dir = get_plugin_directory()
+    installed = list_installed_tools()
+
+    console.print(Panel(
+        f"[bold]Plugin directory:[/bold] {plugins_dir}\n"
+        f"[bold]Installed plugins:[/bold] {len(installed)}",
+        title="[bold cyan]Custom Plugins[/bold cyan]",
+        border_style="cyan",
+    ))
+
+    if not installed:
+        console.print("\n[dim]No custom plugins installed.[/dim]")
+        console.print("[dim]Use 'claw tools add <yaml_file>' to install a plugin.[/dim]")
+        return
+
+    table = Table()
+    table.add_column("ID", style="cyan")
+    table.add_column("File")
+
+    for tool_id, path in installed:
+        table.add_row(tool_id, path.name)
+
+    console.print()
+    console.print(table)
+
+
+@tools.command("template")
+@click.argument("output_file", type=click.Path(path_type=Path), default="custom_tool.yaml")
+def tools_template(output_file: Path) -> None:
+    """Generate a template YAML file for creating custom tools.
+
+    Examples:
+        claw tools template
+        claw tools template my_tool.yaml
+    """
+    console = Console()
+
+    template = '''# Custom Tool Definition for RedClaw
+# See https://github.com/0xdefence/redclaw for documentation
+
+# Required: unique identifier for the tool
+id: my_custom_tool
+
+# Required: the binary to execute
+binary: mytool
+
+# Tool metadata
+name: My Custom Tool
+description: A custom security scanning tool
+category: scanning  # scanning, enumeration, recon, exploitation, reporting
+risk_level: active  # passive, active, intrusive
+default_timeout: 120
+
+# Command line arguments (use {{target}} and {{kwarg_name}} for substitution)
+args:
+  - "-t"
+  - "{{target}}"
+  - "--output"
+  - "json"
+
+# Output parsing configuration
+output_format: json  # json, jsonl, xml, text
+
+# For text output, define regex patterns
+parser:
+  patterns:
+    ips: "\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}\\.\\d{1,3}"
+    ports: "\\d+/tcp|\\d+/udp"
+  key_value: false
+
+# Finding extraction rules
+findings:
+  # Iterate over a JSON array
+  - type: iterate
+    field: results
+    mappings:
+      title: name
+      severity: risk_level
+      description: details
+    remediation: "Review and fix the identified issue"
+
+  # Match a regex pattern
+  - type: regex
+    field: raw
+    pattern: "CRITICAL: (.+)"
+    title: Critical Finding
+    severity: critical
+    description: "A critical issue was detected"
+'''
+
+    if output_file.exists():
+        if not click.confirm(f"File '{output_file}' exists. Overwrite?"):
+            console.print("[yellow]Cancelled[/yellow]")
+            return
+
+    output_file.write_text(template)
+    console.print(f"[green]✓[/green] Created template: {output_file}")
+    console.print(f"[dim]Edit the file, then run: claw tools add {output_file}[/dim]")
