@@ -26,7 +26,7 @@ def cli(ctx: click.Context, verbose: bool) -> None:
 
 
 # Register command groups
-from redclaw.cli.scan import scan, recon, portscan, webscan  # noqa: E402
+from redclaw.cli.scan import scan, recon, portscan, webscan, aiscan  # noqa: E402
 from redclaw.cli.tools import tools  # noqa: E402
 from redclaw.cli.results import results, report  # noqa: E402
 from redclaw.cli.system import init, status, config  # noqa: E402
@@ -36,6 +36,7 @@ cli.add_command(scan)
 cli.add_command(recon)
 cli.add_command(portscan)
 cli.add_command(webscan)
+cli.add_command(aiscan)
 cli.add_command(tools)
 cli.add_command(results)
 cli.add_command(report)
