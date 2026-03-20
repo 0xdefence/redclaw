@@ -1,0 +1,24 @@
+tools:
+  nmap:
+    binary: nmap
+    version_cmd: "nmap --version"
+    category: scanning
+    risk_level: active
+
+  nikto:
+    binary: nikto
+    version_cmd: "nikto -Version 2>&1 | head -1"
+    category: scanning
+    risk_level: intrusive
+
+  dig:
+    binary: dig
+    version_cmd: "dig -v 2>&1 | head -1"
+    category: recon
+    risk_level: passive
+
+  whois:
+    binary: whois
+    version_cmd: "whois --version 2>&1 | head -1 || echo 'whois installed'"
+    category: recon
+    risk_level: passive
