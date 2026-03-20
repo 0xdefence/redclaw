@@ -105,11 +105,13 @@ class TestWhoisParser:
 class TestRegistry:
     def test_default_registry(self) -> None:
         reg = create_default_registry()
-        assert reg.count == 4
+        assert reg.count == 6
         assert "nmap" in reg.list_ids()
         assert "nikto" in reg.list_ids()
         assert "dig" in reg.list_ids()
         assert "whois" in reg.list_ids()
+        assert "nuclei" in reg.list_ids()
+        assert "gobuster" in reg.list_ids()
 
     def test_get_tool(self) -> None:
         reg = create_default_registry()

@@ -30,6 +30,7 @@ from redclaw.cli.scan import scan, recon, portscan, webscan  # noqa: E402
 from redclaw.cli.tools import tools  # noqa: E402
 from redclaw.cli.results import results, report  # noqa: E402
 from redclaw.cli.system import init, status, config  # noqa: E402
+from redclaw.cli.plan import plan  # noqa: E402
 
 cli.add_command(scan)
 cli.add_command(recon)
@@ -41,6 +42,7 @@ cli.add_command(report)
 cli.add_command(init)
 cli.add_command(status)
 cli.add_command(config)
+cli.add_command(plan)
 
 
 if __name__ == "__main__":

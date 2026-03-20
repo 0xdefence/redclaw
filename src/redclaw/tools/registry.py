@@ -49,10 +49,14 @@ def create_default_registry() -> ToolRegistry:
     from redclaw.tools.nmap import NmapTool
     from redclaw.tools.nikto import NiktoTool
     from redclaw.tools.dns import DigTool, WhoisTool
+    from redclaw.tools.nuclei import NucleiTool
+    from redclaw.tools.gobuster import GobusterTool
 
     registry = ToolRegistry()
     registry.register(NmapTool())
     registry.register(NiktoTool())
     registry.register(DigTool())
     registry.register(WhoisTool())
+    registry.register(NucleiTool())
+    registry.register(GobusterTool())
     return registry

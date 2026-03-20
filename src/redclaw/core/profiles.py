@@ -28,23 +28,51 @@ PROFILES: dict[str, ScanProfile] = {
     ),
     "full": ScanProfile(
         name="full",
-        description="Full scan — DNS, WHOIS, port scan, web vuln scan",
-        tools=["dig", "whois", "nmap", "nikto"],
+        description="Comprehensive scan — recon, ports, web vulns, directories",
+        tools=["dig", "whois", "nmap", "nikto", "nuclei", "gobuster"],
         tool_kwargs={
             "nmap": {"profile": "full"},
+            "gobuster": {"mode": "dir"},
         },
     ),
     "web": ScanProfile(
         name="web",
-        description="Web vulnerability scan — port scan + nikto",
-        tools=["nmap", "nikto"],
-        tool_kwargs={"nmap": {"profile": "quick"}},
+        description="Web application scan — nikto + nuclei + directory enumeration",
+        tools=["nmap", "nikto", "nuclei", "gobuster"],
+        tool_kwargs={
+            "nmap": {"profile": "quick"},
+            "gobuster": {"mode": "dir"},
+        },
     ),
     "stealth": ScanProfile(
         name="stealth",
-        description="Low-noise stealth scan",
-        tools=["dig", "nmap"],
+        description="Low-noise stealth scan — passive recon + slow port scan",
+        tools=["dig", "whois", "nmap"],
         tool_kwargs={"nmap": {"profile": "stealth"}},
+    ),
+    "vuln": ScanProfile(
+        name="vuln",
+        description="Vulnerability scan — nuclei with CVE detection",
+        tools=["nmap", "nuclei"],
+        tool_kwargs={
+            "nmap": {"profile": "quick"},
+            "nuclei": {"tags": "cve"},
+        },
+    ),
+    "enum": ScanProfile(
+        name="enum",
+        description="Enumeration — directory and subdomain brute-forcing",
+        tools=["dig", "nmap", "gobuster"],
+        tool_kwargs={
+            "nmap": {"profile": "quick"},
+            "gobuster": {"mode": "dir"},
+        },
+    ),
+    "custom": ScanProfile(
+        name="custom",
+        description="Custom tool selection (use with --tools)",
+        tools=[],
+        tool_kwargs={},
     ),
 }
 
