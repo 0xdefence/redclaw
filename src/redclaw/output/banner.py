@@ -1,98 +1,113 @@
 """RedClaw banner and branding."""
 from __future__ import annotations
 
-from rich.console import Console
-from rich.panel import Panel
+import os
+import shutil
 
-# Red ANSI colours
-RED = "\033[91m"
+# ANSI color codes (used for banner to avoid Rich markup issues with block chars)
+BRIGHT_RED = "\033[91m"
+MID_RED = "\033[31m"
 DIM_RED = "\033[2;31m"
+DIM_GREY = "\033[2m"
 RESET = "\033[0m"
 
-BANNER = f"""{RED}
-    ██████╗ ███████╗██████╗  ██████╗██╗      █████╗ ██╗    ██╗
-    ██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██╔══██╗██║    ██║
-    ██████╔╝█████╗  ██║  ██║██║     ██║     ███████║██║ █╗ ██║
-    ██╔══██╗██╔══╝  ██║  ██║██║     ██║     ██╔══██║██║███╗██║
-    ██║  ██║███████╗██████╔╝╚██████╗███████╗██╔══██║╚███╔███╔╝
-    ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝
-{RESET}"""
+# Full banner with claw marks
+BANNER_FULL = f"""{BRIGHT_RED}     ╱╲    ╱╲    ╱╲
+    ╱  ╲  ╱  ╲  ╱  ╲
+   ╱    ╲╱    ╲╱    ╲
+  ╱                   ╲
+ ╱  ╲  ╱  ╲  ╱  ╲  ╱  ╲{RESET}
+{BRIGHT_RED}  ██████╗ ███████╗██████╗  ██████╗██╗      █████╗ ██╗    ██╗{RESET}
+{BRIGHT_RED}  ██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██╔══██╗██║    ██║{RESET}
+{MID_RED}  ██████╔╝█████╗  ██║  ██║██║     ██║     ███████║██║ █╗ ██║{RESET}
+{MID_RED}  ██╔══██╗██╔══╝  ██║  ██║██║     ██║     ██╔══██║██║███╗██║{RESET}
+{DIM_RED}  ██║  ██║███████╗██████╔╝╚██████╗███████╗██╔══██║╚███╔███╔╝{RESET}
+{DIM_RED}  ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝{RESET}"""
 
-STEALTH_BANNER = f"{DIM_RED}RedClaw v{{version}}{RESET}"
+# Compact banner (no claw marks) for narrow terminals
+BANNER_COMPACT = f"""{BRIGHT_RED}  ██████╗ ███████╗██████╗  ██████╗██╗      █████╗ ██╗    ██╗{RESET}
+{BRIGHT_RED}  ██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██╔══██╗██║    ██║{RESET}
+{MID_RED}  ██████╔╝█████╗  ██║  ██║██║     ██║     ███████║██║ █╗ ██║{RESET}
+{MID_RED}  ██╔══██╗██╔══╝  ██║  ██║██║     ██║     ██╔══██║██║███╗██║{RESET}
+{DIM_RED}  ██║  ██║███████╗██████╔╝╚██████╗███████╗██╔══██║╚███╔███╔╝{RESET}
+{DIM_RED}  ╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝{RESET}"""
+
+# Stealth banner (minimal, single line)
+STEALTH_BANNER = f"{DIM_RED}redclaw v{{version}}{RESET}"
 
 
 def print_banner(version: str, stealth: bool = False) -> None:
-    """Print the RedClaw banner.
+    """Print the RedClaw banner with ANSI colors.
 
     Args:
         version: Current version string
         stealth: If True, use minimal stealth banner
+
+    Notes:
+        - Uses raw ANSI codes (not Rich) to avoid markup conflicts with block chars
+        - Respects NO_COLOR environment variable
+        - Auto-switches to compact banner for narrow terminals (< 70 cols)
     """
+    # Check for NO_COLOR environment variable
+    no_color = os.environ.get("NO_COLOR", "").lower() in ("1", "true", "yes")
+
     if stealth:
-        print(STEALTH_BANNER.format(version=version))
+        # Stealth mode: single line, minimal
+        banner = STEALTH_BANNER.format(version=version)
+        if no_color:
+            banner = _strip_ansi(banner)
+        print(banner)
     else:
-        print(BANNER)
-        print(f"  {DIM_RED}v{version} — CLI offensive security engine{RESET}")
+        # Normal mode: full banner with optional claw marks
+        terminal_width = shutil.get_terminal_size((80, 24)).columns
+
+        # Use compact banner if terminal is narrow
+        if terminal_width < 70:
+            banner = BANNER_COMPACT
+        else:
+            banner = BANNER_FULL
+
+        # Strip colors if NO_COLOR is set
+        if no_color:
+            banner = _strip_ansi(banner)
+
+        print(banner)
+
+        # Version and tagline
+        tagline = f"  v{version} — offensive security engine"
+        if no_color:
+            print(tagline)
+        else:
+            print(f"  {DIM_GREY}{tagline}{RESET}")
         print()
 
 
-def print_banner_rich(version: str, stealth: bool = False, console: Console | None = None) -> None:
-    """Print the RedClaw banner using Rich formatting.
+def print_banner_rich(version: str, stealth: bool = False) -> None:
+    """Print the RedClaw banner using Rich (not recommended - use print_banner instead).
+
+    DEPRECATED: Use print_banner() instead. Rich markup conflicts with block
+    characters, so we use raw ANSI codes for the banner.
 
     Args:
         version: Current version string
         stealth: If True, use minimal stealth banner
-        console: Rich console (creates one if not provided)
     """
-    console = console or Console()
-
-    if stealth:
-        console.print(f"[dim red]RedClaw v{version}[/dim red]")
-    else:
-        console.print(Panel.fit(
-            "[bold red]"
-            "██████╗ ███████╗██████╗  ██████╗██╗      █████╗ ██╗    ██╗\n"
-            "██╔══██╗██╔════╝██╔══██╗██╔════╝██║     ██╔══██╗██║    ██║\n"
-            "██████╔╝█████╗  ██║  ██║██║     ██║     ███████║██║ █╗ ██║\n"
-            "██╔══██╗██╔══╝  ██║  ██║██║     ██║     ██╔══██║██║███╗██║\n"
-            "██║  ██║███████╗██████╔╝╚██████╗███████╗██╔══██║╚███╔███╔╝\n"
-            "╚═╝  ╚═╝╚══════╝╚═════╝  ╚═════╝╚══════╝╚═╝  ╚═╝ ╚══╝╚══╝\n"
-            "[/bold red]"
-            f"\n[dim]v{version} — CLI offensive security engine[/dim]",
-            border_style="red",
-            padding=(0, 2),
-        ))
-        console.print()
+    # Fall back to ANSI banner for better rendering
+    print_banner(version, stealth)
 
 
-# ASCII crab for fun (optional small variant)
-CRAB_SMALL = r"""
-    /\___/\
-   (  o o  )
-   (  =^=  )
-    )------(
-   (  claw  )
-"""
-
-CRAB_MEDIUM = r"""
-      /)  /)
-    /' `--' `\
-   (  (  O O  )
-    \  \__o__/
-     `.    /
-       `--'
-"""
-
-
-def get_crab_art(size: str = "small") -> str:
-    """Get ASCII crab art.
+def _strip_ansi(text: str) -> str:
+    """Strip ANSI color codes from text.
 
     Args:
-        size: "small" or "medium"
+        text: Text with ANSI codes
 
     Returns:
-        ASCII art string
+        Plain text without ANSI codes
     """
-    if size == "medium":
-        return CRAB_MEDIUM
-    return CRAB_SMALL
+    import re
+    # Remove ANSI escape sequences
+    ansi_escape = re.compile(r"\033\[[0-9;]*m")
+    return ansi_escape.sub("", text)
+
+

@@ -1,0 +1,37 @@
+# RedClaw Standard Docker Image (~500 MB)
+# Tools: nmap, nikto, gobuster, dig, whois
+# Use case: Web application security testing (DEFAULT)
+
+FROM kalilinux/kali-rolling:latest
+
+# Install common security tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap \
+    nikto \
+    gobuster \
+    dnsutils \
+    whois \
+    curl \
+    jq \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
+
+# Create non-root user
+RUN useradd -m -s /bin/bash scanner && \
+    mkdir -p /home/scanner/scans && \
+    chown -R scanner:scanner /home/scanner
+
+USER scanner
+WORKDIR /home/scanner
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD nmap --version > /dev/null && nikto -Version > /dev/null || exit 1
+
+LABEL org.redclaw.image.variant="standard" \
+      org.redclaw.image.size="~500MB" \
+      org.redclaw.image.tools="nmap,nikto,gobuster,dig,whois" \
+      org.redclaw.image.default="true"

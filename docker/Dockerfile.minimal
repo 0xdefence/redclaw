@@ -1,0 +1,33 @@
+# RedClaw Minimal Docker Image (~300 MB)
+# Tools: nmap, dig, whois
+# Use case: Basic reconnaissance and port scanning
+
+FROM kalilinux/kali-rolling:latest
+
+# Install only essential tools
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    nmap \
+    dnsutils \
+    whois \
+    curl \
+    ca-certificates \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /tmp/* \
+    && rm -rf /var/tmp/*
+
+# Create non-root user
+RUN useradd -m -s /bin/bash scanner && \
+    mkdir -p /home/scanner/scans && \
+    chown -R scanner:scanner /home/scanner
+
+USER scanner
+WORKDIR /home/scanner
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=3s \
+    CMD nmap --version > /dev/null || exit 1
+
+LABEL org.redclaw.image.variant="minimal" \
+      org.redclaw.image.size="~300MB" \
+      org.redclaw.image.tools="nmap,dig,whois"

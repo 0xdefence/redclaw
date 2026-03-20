@@ -48,8 +48,21 @@ def _run_scan(target: str, profile: str, tools: list[str] | None, verbose: bool)
 @click.option("-p", "--profile", default="quick", help="Scan profile: quick, recon, full, web, stealth, vuln, enum")
 @click.option("-t", "--tools", multiple=True, help="Override profile with specific tools (repeatable)")
 @click.option("--ai", is_flag=True, help="Use AI to select tools based on target analysis")
+@click.option(
+    "--docker-image",
+    type=click.Choice(["minimal", "standard", "full"], case_sensitive=False),
+    default="standard",
+    help="Docker image variant: minimal (~300MB), standard (~400MB), full (~800MB)",
+)
 @pass_context
-def scan(ctx: ClawContext, target: str, profile: str, tools: tuple[str, ...], ai: bool) -> None:
+def scan(
+    ctx: ClawContext,
+    target: str,
+    profile: str,
+    tools: tuple[str, ...],
+    ai: bool,
+    docker_image: str,
+) -> None:
     """Run a security scan against TARGET.
 
     Examples:
@@ -57,7 +70,13 @@ def scan(ctx: ClawContext, target: str, profile: str, tools: tuple[str, ...], ai
         claw scan example.com --profile full
         claw scan example.com --tools nmap,nikto
         claw scan example.com --ai
+        claw scan example.com --docker-image minimal
     """
+    # Set docker image variant in config
+    from redclaw.models.config import get_config
+    config = get_config()
+    config.docker_image = docker_image
+
     if ai:
         _run_ai_scan(target, f"Comprehensive security scan of {target}", ctx.verbose)
     else:

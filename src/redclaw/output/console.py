@@ -1,105 +1,130 @@
-"""Rich console output helpers."""
+"""Console output facade — routes to appropriate output mode (normal/stealth/JSON)."""
 from __future__ import annotations
+
+import os
+from enum import Enum
+from typing import TYPE_CHECKING
 
 from rich.console import Console
 from rich.panel import Panel
 from rich.table import Table
-from rich.text import Text
 
 from redclaw.models import Scan, ScanStatus, Severity
+from redclaw.output.display import DisplayComponents, SEVERITY_COLORS, STATUS_ICONS
+from redclaw.output.stealth import StealthOutput
+from redclaw.output.json_output import JSONOutput
 
+if TYPE_CHECKING:
+    from redclaw.models import Finding
+
+
+class OutputMode(str, Enum):
+    """Output mode for CLI."""
+    NORMAL = "normal"
+    STEALTH = "stealth"
+    JSON = "json"
+
+
+# Global console instance
 console = Console()
 
-SEVERITY_COLORS = {
-    "critical": "bold red",
-    "high": "red",
-    "medium": "yellow",
-    "low": "cyan",
-    "info": "dim",
-}
 
-STATUS_ICONS = {
-    "pending": "[dim]⏳[/dim]",
-    "running": "[yellow]⚡[/yellow]",
-    "completed": "[green]✓[/green]",
-    "failed": "[red]✗[/red]",
-    "cancelled": "[dim]⊘[/dim]",
-}
+def print_scan_header(
+    target: str,
+    profile: str,
+    tools: list[str] | None = None,
+    scan_id: str | None = None,
+    output_mode: OutputMode = OutputMode.NORMAL,
+) -> None:
+    """Print scan start header.
 
+    Args:
+        target: Target domain/IP
+        profile: Scan profile name
+        tools: List of tool IDs (if specified)
+        scan_id: Scan ID (optional)
+        output_mode: Output mode (normal, stealth, json)
+    """
+    if output_mode == OutputMode.JSON:
+        # JSON mode: no header, progress goes to stderr
+        return
+    elif output_mode == OutputMode.STEALTH:
+        # Stealth mode: minimal banner
+        return  # Banner printed separately
 
-def print_scan_header(target: str, profile: str, tools: list[str] | None) -> None:
-    """Print scan start banner."""
-    tool_str = ", ".join(tools) if tools else f"profile: {profile}"
-    console.print(Panel(
-        f"[bold]Target:[/bold] {target}\n[bold]Tools:[/bold] {tool_str}",
-        title="[bold cyan]RedClaw Scan[/bold cyan]",
-        border_style="cyan",
-    ))
-    console.print()
-
-
-def print_tool_progress(tool_id: str, status: str, detail: str) -> None:
-    """Print a tool execution progress line."""
-    icon = "⚡" if status == "running" else ("✓" if status == "success" else "✗")
-    color = "yellow" if status == "running" else ("green" if status == "success" else "red")
-    console.print(f"  [{color}]{icon}[/{color}] [bold]{tool_id}[/bold] — {detail}")
+    # Normal mode: use display components
+    display = DisplayComponents(console)
+    display.scan_header(target, profile, tools, scan_id)
 
 
-def print_scan_summary(scan: Scan) -> None:
-    """Print scan completion summary with findings table."""
-    console.print()
+def print_tool_progress(
+    tool_id: str,
+    status: str,
+    detail: str = "",
+    count: int | None = None,
+    duration_ms: int | None = None,
+    has_findings: bool = False,
+    output_mode: OutputMode = OutputMode.NORMAL,
+) -> None:
+    """Print a tool execution progress line.
 
-    # Status line
-    status_icon = STATUS_ICONS.get(scan.status.value, "?")
-    console.print(f"{status_icon} Scan [bold]{scan.id}[/bold] — {scan.status.value} in {scan.duration_ms}ms")
-
-    if scan.error:
-        console.print(f"  [red]Error: {scan.error}[/red]")
+    Args:
+        tool_id: Tool identifier
+        status: running, success, failed, timeout, or blocked
+        detail: Detail string (for running state)
+        count: Number of results/findings
+        duration_ms: Execution duration in milliseconds
+        has_findings: True if there are security findings
+        output_mode: Output mode (normal, stealth, json)
+    """
+    if output_mode == OutputMode.JSON:
+        # JSON mode: no progress output
         return
 
-    if not scan.findings:
-        console.print("  [dim]No findings[/dim]")
+    display = DisplayComponents(console)
+
+    if status == "running":
+        display.tool_progress_start(tool_id, detail)
+    else:
+        display.tool_progress_done(tool_id, status, count, duration_ms, has_findings)
+
+
+def print_scan_summary(
+    scan: Scan,
+    verbose: bool = False,
+    output_mode: OutputMode = OutputMode.NORMAL,
+) -> None:
+    """Print scan completion summary with findings.
+
+    Args:
+        scan: Scan object with results
+        verbose: If True, show all INFO findings
+        output_mode: Output mode (normal, stealth, json)
+    """
+    if output_mode == OutputMode.JSON:
+        # JSON mode: output handled separately
+        from redclaw.output.json_output import JSONOutput
+        json_out = JSONOutput(compact=False)
+        json_out.output_scan(scan)
+        return
+    elif output_mode == OutputMode.STEALTH:
+        # Stealth mode: minimal output
+        from redclaw.output.stealth import format_scan_stealth
+        format_scan_stealth(scan, version="0.1.0")
         return
 
-    # Findings summary
-    counts = scan.finding_counts
-    parts: list[str] = []
-    for sev in ["critical", "high", "medium", "low", "info"]:
-        if counts.get(sev, 0) > 0:
-            color = SEVERITY_COLORS[sev]
-            parts.append(f"[{color}]{counts[sev]} {sev}[/{color}]")
-    console.print(f"  Findings: {', '.join(parts)}")
-    console.print()
-
-    # Findings table (skip info if too many)
-    show_info = len(scan.findings) <= 20
-    table = Table(title="Findings", show_lines=True)
-    table.add_column("Severity", width=10)
-    table.add_column("Tool", width=8)
-    table.add_column("Title", max_width=60)
-    table.add_column("Evidence", max_width=40)
-
-    for f in scan.findings:
-        if not show_info and f.severity == Severity.INFO:
-            continue
-        color = SEVERITY_COLORS.get(f.severity.value, "white")
-        table.add_row(
-            f"[{color}]{f.severity.value.upper()}[/{color}]",
-            f.tool_id,
-            f.title[:60],
-            f.evidence[:40] if f.evidence else "",
-        )
-
-    if not show_info:
-        info_count = counts.get("info", 0)
-        if info_count > 0:
-            table.add_row("[dim]INFO[/dim]", "—", f"[dim]{info_count} informational findings hidden[/dim]", "")
-
-    console.print(table)
+    # Normal mode: use display components
+    display = DisplayComponents(console)
+    display.scan_summary(scan)
+    display.findings_list(scan.findings, verbose=verbose)
 
 
 def print_scan_list(scans: list[Scan]) -> None:
-    """Print a table of recent scans."""
+    """Print a table of recent scans.
+
+    Args:
+        scans: List of Scan objects
+    """
     table = Table(title="Recent Scans")
     table.add_column("ID", style="cyan", width=14)
     table.add_column("Target", max_width=30)
@@ -111,9 +136,30 @@ def print_scan_list(scans: list[Scan]) -> None:
     table.add_column("Date", width=20)
 
     for s in scans:
-        status_icon = STATUS_ICONS.get(s.status.value, "?")
+        # Status icon
+        if s.status == ScanStatus.COMPLETED:
+            status_icon = "[green]✓[/green]"
+        elif s.status == ScanStatus.FAILED:
+            status_icon = "[red]✗[/red]"
+        elif s.status == ScanStatus.RUNNING:
+            status_icon = "[yellow]⚡[/yellow]"
+        else:
+            status_icon = "[dim]⊘[/dim]"
+
+        # Format values
         findings = str(len(s.findings)) if s.findings else "—"
-        duration = f"{s.duration_ms}ms" if s.duration_ms else "—"
+
+        # Format duration
+        if s.duration_ms:
+            if s.duration_ms < 1000:
+                duration = f"{s.duration_ms}ms"
+            elif s.duration_ms < 60000:
+                duration = f"{s.duration_ms / 1000:.1f}s"
+            else:
+                duration = f"{s.duration_ms // 60000}m {(s.duration_ms % 60000) // 1000}s"
+        else:
+            duration = "—"
+
         table.add_row(
             s.id,
             s.target,
@@ -128,15 +174,31 @@ def print_scan_list(scans: list[Scan]) -> None:
     console.print(table)
 
 
-def print_scan_detail(scan: Scan) -> None:
-    """Print detailed view of a single scan."""
+def print_scan_detail(scan: Scan, verbose: bool = False) -> None:
+    """Print detailed view of a single scan.
+
+    Args:
+        scan: Scan object
+        verbose: If True, show all findings including INFO
+    """
+    # Format duration
+    if scan.duration_ms:
+        if scan.duration_ms < 1000:
+            duration = f"{scan.duration_ms}ms"
+        elif scan.duration_ms < 60000:
+            duration = f"{scan.duration_ms / 1000:.1f}s"
+        else:
+            duration = f"{scan.duration_ms // 60000}m {(scan.duration_ms % 60000) // 1000}s"
+    else:
+        duration = "—"
+
     console.print(Panel(
         f"[bold]ID:[/bold] {scan.id}\n"
         f"[bold]Target:[/bold] {scan.target}\n"
         f"[bold]Profile:[/bold] {scan.profile}\n"
         f"[bold]Status:[/bold] {scan.status.value}\n"
         f"[bold]Tools:[/bold] {', '.join(scan.tools_used)}\n"
-        f"[bold]Duration:[/bold] {scan.duration_ms}ms\n"
+        f"[bold]Duration:[/bold] {duration}\n"
         f"[bold]Started:[/bold] {scan.started_at.isoformat()}\n"
         f"[bold]Findings:[/bold] {len(scan.findings)}",
         title=f"[bold]Scan {scan.id}[/bold]",
@@ -147,5 +209,23 @@ def print_scan_detail(scan: Scan) -> None:
         console.print(f"\n[red]Error: {scan.error}[/red]")
 
     if scan.findings:
-        console.print()
-        print_scan_summary(scan)
+        # Use display components for findings list
+        display = DisplayComponents(console)
+        display.findings_list(scan.findings, verbose=verbose)
+
+
+def get_output_mode() -> OutputMode:
+    """Detect output mode from environment/flags.
+
+    Returns:
+        OutputMode enum value
+    """
+    # Check for stealth mode
+    if os.environ.get("REDCLAW_STEALTH", "").lower() in ("1", "true", "yes"):
+        return OutputMode.STEALTH
+
+    # Check for JSON mode
+    if os.environ.get("REDCLAW_JSON", "").lower() in ("1", "true", "yes"):
+        return OutputMode.JSON
+
+    return OutputMode.NORMAL

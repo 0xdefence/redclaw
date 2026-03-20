@@ -407,16 +407,7 @@ class TestBanner:
         # Stealth mode should be minimal
         assert "██" not in captured.out
 
-    def test_get_crab_art(self) -> None:
-        """Test ASCII art retrieval."""
-        from redclaw.output.banner import get_crab_art
-
-        small = get_crab_art("small")
-        medium = get_crab_art("medium")
-
-        assert len(small) > 0
-        assert len(medium) > 0
-        assert len(medium) > len(small)  # Medium should be larger
+    # test_get_crab_art removed - get_crab_art function not in spec and was removed
 
 
 # ─── Integration Tests ────────────────────────────────────────────────────────

@@ -7,6 +7,15 @@ from pydantic_settings import BaseSettings
 from pydantic import Field
 
 
+# Docker image variants
+DOCKER_IMAGES = {
+    "minimal": "redclaw/kali:minimal",      # ~300 MB - Basic tools (nmap, dig, whois)
+    "standard": "redclaw/kali:standard",    # ~400 MB - Default (+ nikto, gobuster)
+    "full": "redclaw/kali:full",            # ~800 MB - Full suite (+ nuclei)
+    "latest": "redclaw/kali:standard",      # Alias for standard
+}
+
+
 class RedClawConfig(BaseSettings):
     """Global configuration loaded from env vars and ~/.redclaw/config."""
 
@@ -15,7 +24,7 @@ class RedClawConfig(BaseSettings):
     db_path: Path | None = None  # Computed in model_post_init
 
     # Docker
-    docker_image: str = "redclaw/kali:latest"
+    docker_image: str = "standard"  # minimal, standard, full (or full image name)
     container_name: str = "redclaw-kali"
     container_timeout: int = 300  # Max seconds per tool execution
 
@@ -37,6 +46,19 @@ class RedClawConfig(BaseSettings):
         if self.db_path is None:
             self.db_path = self.data_dir / "redclaw.db"
         self.data_dir.mkdir(parents=True, exist_ok=True)
+
+    def get_docker_image(self) -> str:
+        """Get the full Docker image name from variant or direct name.
+
+        Returns:
+            Full Docker image name (e.g., "redclaw/kali:standard")
+        """
+        # If it's a known variant, return the full image name
+        if self.docker_image in DOCKER_IMAGES:
+            return DOCKER_IMAGES[self.docker_image]
+
+        # Otherwise, assume it's a full image name
+        return self.docker_image
 
 
 def get_config() -> RedClawConfig:

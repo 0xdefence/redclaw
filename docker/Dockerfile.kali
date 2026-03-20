@@ -1,3 +1,10 @@
+# ⚠️ DEPRECATED: This Dockerfile creates a 3.3 GB image!
+# ⚠️ Use Dockerfile.standard instead (~500 MB)
+# ⚠️ See docker/README.md for details
+
+# This file is kept for backwards compatibility only.
+# DO NOT USE FOR NEW DEPLOYMENTS!
+
 FROM kalilinux/kali-rolling:latest
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -9,16 +16,27 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     whois \
     curl \
     jq \
-    wordlists \
-    seclists \
+    wordlists \      # ⚠️ ~500 MB-1 GB
+    seclists \       # ⚠️ ~1-1.5 GB
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
-# Update nuclei templates
+# Update nuclei templates  # ⚠️ ~50-100 MB
 RUN nuclei -update-templates 2>/dev/null || true
 
 RUN useradd -m -s /bin/bash scanner
 USER scanner
 WORKDIR /home/scanner
+
+# Show deprecation warning on container start
+RUN echo '#!/bin/bash' > /home/scanner/.bashrc && \
+    echo 'echo "⚠️  WARNING: This is the DEPRECATED large image (3.3 GB)"' >> /home/scanner/.bashrc && \
+    echo 'echo "⚠️  Please use redclaw/kali:standard instead (~500 MB)"' >> /home/scanner/.bashrc && \
+    echo 'echo "⚠️  See docker/README.md for details"' >> /home/scanner/.bashrc && \
+    echo 'echo ""' >> /home/scanner/.bashrc
+
+LABEL org.redclaw.image.deprecated="true" \
+      org.redclaw.image.size="3.3GB" \
+      org.redclaw.image.replacement="redclaw/kali:standard"
 
 ENTRYPOINT ["sleep", "infinity"]

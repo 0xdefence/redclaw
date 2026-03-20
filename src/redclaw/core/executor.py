@@ -46,7 +46,7 @@ class DockerExecutor:
     def image_exists(self) -> bool:
         """Check if the Kali image is available locally."""
         try:
-            self.client.images.get(self.config.docker_image)
+            self.client.images.get(self.config.get_docker_image())
             return True
         except ImageNotFound:
             return False
@@ -63,10 +63,23 @@ class DockerExecutor:
                 "Run 'claw init' from the project root or pass --dockerfile-dir."
             )
 
+        # Determine which Dockerfile to use based on variant
+        variant = self.config.docker_image
+        if variant in ("minimal", "standard", "full"):
+            dockerfile = f"Dockerfile.{variant}"
+        else:
+            dockerfile = "Dockerfile.standard"  # Default
+
+        if not (dockerfile_dir / dockerfile).exists():
+            raise FileNotFoundError(
+                f"{dockerfile} not found in {dockerfile_dir}. "
+                f"Available: Dockerfile.minimal, Dockerfile.standard, Dockerfile.full"
+            )
+
         image, _logs = self.client.images.build(
             path=str(dockerfile_dir),
-            dockerfile="Dockerfile.kali",
-            tag=self.config.docker_image,
+            dockerfile=dockerfile,
+            tag=self.config.get_docker_image(),
             rm=True,
         )
         return image.id
@@ -99,11 +112,11 @@ class DockerExecutor:
 
         if not self.image_exists():
             raise RuntimeError(
-                f"Image '{self.config.docker_image}' not found. Run 'claw init' first."
+                f"Image '{self.config.get_docker_image()}' not found. Run 'claw init' first."
             )
 
         container = self.client.containers.run(
-            self.config.docker_image,
+            self.config.get_docker_image(),
             name=self.config.container_name,
             detach=True,
             tty=True,
